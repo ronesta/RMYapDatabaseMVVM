@@ -9,16 +9,15 @@ import Foundation
 import UIKit
 import YapDatabase
 
-final class DatabaseManager {
-    static let shared = DatabaseManager()
-
+final class DatabaseManager: StorageManagerProtocol {
+    private let charactersKey = "charactersKey"
     private let charactersCollection = "characters"
     private let imagesCollection = "images"
     private let charactersOrderCollection = "charactersOrder"
     private let database: YapDatabase
     private let connection: YapDatabaseConnection
 
-    private init() {
+    init() {
         do {
             database = try DatabaseManager.setupDatabase()
             database.registerCodableSerialization(Character.self, forCollection: charactersCollection)
@@ -58,9 +57,14 @@ final class DatabaseManager {
         }
     }
 
-    func saveImage(_ image: Data, key: String) {
-        connection.readWrite { transaction in
-            transaction.setObject(image, forKey: key, inCollection: imagesCollection)
+    func saveCharacters(_ characters: [Character]) {
+        do {
+            let data = try JSONEncoder().encode(characters)
+            connection.readWrite { transaction in
+                transaction.setObject(data, forKey: charactersKey, inCollection: charactersCollection)
+            }
+        } catch {
+            print("Failed to encode characters: \(error)")
         }
     }
 
@@ -73,7 +77,7 @@ final class DatabaseManager {
         return character
     }
 
-    func loadAllCharacters() -> [Character] {
+    func loadCharacters() -> [Character] {
         var characters = [Character]()
 
         connection.read { transaction in
@@ -89,6 +93,12 @@ final class DatabaseManager {
         }
 
         return characters
+    }
+
+    func saveImage(_ image: Data, key: String) {
+        connection.readWrite { transaction in
+            transaction.setObject(image, forKey: key, inCollection: imagesCollection)
+        }
     }
 
     func loadImage(key: String) -> Data? {
@@ -113,7 +123,7 @@ extension DatabaseManager {
         }
     }
 
-    func clearAllCharacters() {
+    func clearCharacters() {
         connection.readWrite { transaction in
             transaction.removeAllObjects(inCollection: charactersCollection)
         }

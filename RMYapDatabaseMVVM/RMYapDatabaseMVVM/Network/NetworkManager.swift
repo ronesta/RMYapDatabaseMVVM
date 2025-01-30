@@ -8,14 +8,16 @@
 import Foundation
 import UIKit
 
-final class NetworkManager {
-    static let shared = NetworkManager()
+final class NetworkManager: NetworkManagerProtocol {
     var dataCounter = 1
     var imageCounter = 1
 
+    private let storageManager: StorageManagerProtocol?
     private let urlString = "https://rickandmortyapi.com/api/character"
 
-    private init() {}
+    init(storageManager: StorageManagerProtocol) {
+        self.storageManager = storageManager
+    }
 
     func getCharacters(completion: @escaping (Result<[Character], Error>) -> Void) {
         guard let url = URL(string: urlString) else {
@@ -58,38 +60,40 @@ final class NetworkManager {
     }
 
     func loadImage(from urlString: String, completion: @escaping (UIImage?) -> Void) {
-        if let imageData = DatabaseManager.shared.loadImage(key: urlString),
+
+        if let imageData = storageManager?.loadImage(key: urlString),
            let image = UIImage(data: imageData) {
             completion(image)
-        } else {
-            guard let url = URL(string: urlString) else {
-                completion(nil)
+            return
+        }
+
+        guard let url = URL(string: urlString) else {
+            completion(nil)
+            return
+        }
+
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            if let error {
+                print("Error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    completion(nil)
+                }
                 return
             }
 
-            URLSession.shared.dataTask(with: url) { data, _, error in
-                if let error {
-                    print("Error: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
-                        completion(nil)
-                    }
-                    return
+            if let data,
+               let image = UIImage(data: data) {
+                self.storageManager?.saveImage(data, key: urlString)
+                DispatchQueue.main.async {
+                    completion(image)
+                    print("Load image \(self.imageCounter)")
+                    self.imageCounter += 1
                 }
-
-                if let data,
-                   let image = UIImage(data: data) {
-                    DatabaseManager.shared.saveImage(data, key: urlString)
-                    DispatchQueue.main.async {
-                        completion(image)
-                        print("Load image \(self.imageCounter)")
-                        self.imageCounter += 1
-                    }
-                } else {
-                    DispatchQueue.main.async {
-                        completion(nil)
-                    }
+            } else {
+                DispatchQueue.main.async {
+                    completion(nil)
                 }
-            }.resume()
-        }
+            }
+        }.resume()
     }
 }
